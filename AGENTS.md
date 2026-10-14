@@ -1,14 +1,17 @@
-# bun-svelte-starter
+# aichat
 
-> **This is a starter template, not a finished application.** This file
-> describes the template's stack and conventions. Once the real application
-> takes shape, rewrite this file to describe that application (its purpose,
-> domain, structure, and conventions) and drop this notice. Treat the example
-> routes and components as placeholders to replace, not patterns to preserve.
+Minimal AI chat app for OpenAI-compatible Chat Completions APIs. Compiles to a
+single Bun binary (`dist/app`). Svelte 5 SPA in `web/`, Hono + Zod API in
+`server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
 
-Full-stack Bun app that compiles to a single binary (`dist/app`).
-Svelte 5 SPA in `web/`, Hono + Zod API in `server/`, end-to-end typed via Hono RPC.
-No Vite, no Node.js. Bun bundles everything, including the frontend.
+- `server/index.ts`: `GET /api/models` lists upstream models; `POST /api/chat`
+  streams the assistant reply as plain text chunks. Uses the `openai` SDK,
+  which reads `OPENAI_BASE_URL` / `OPENAI_API_KEY`; `OPENAI_MODEL` sets the
+  default model. Upstream errors become `{ error }` JSON responses.
+- `web/App.svelte`: the whole chat UI (in-memory history, no persistence).
+  Markdown is rendered with `marked` and sanitized with DOMPurify
+  (`web/markdown.ts`), styled with `@tailwindcss/typography`. Icons come from
+  `@lucide/svelte` (import per icon: `@lucide/svelte/icons/<name>`).
 
 ## Commands
 
