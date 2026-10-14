@@ -13,7 +13,9 @@ API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
   once at startup) and sending `Copilot-Integration-Id: vscode-chat`. Upstream
   errors become `{ error }` JSON responses.
 - `web/App.svelte`: the whole chat UI (in-memory history, no persistence;
-  the selected model and per-model effort are remembered in `localStorage`).
+  the selected model, per-model effort, and the global system prompt are
+  remembered in `localStorage`). The system prompt is sent as `system` and
+  prepended server-side as a `system` message when non-blank.
   Markdown is rendered with `marked` and sanitized with DOMPurify
   (`web/markdown.ts`), styled with `@tailwindcss/typography`. Icons come from
   `@lucide/svelte` (import per icon: `@lucide/svelte/icons/<name>`).

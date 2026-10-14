@@ -55,6 +55,7 @@ function defaultEffort(levels: string[], family: string): string | undefined {
 const chatSchema = z.object({
   model: z.string().min(1),
   reasoningEffort: z.string().optional(),
+  system: z.string().optional(),
   messages: z
     .array(
       z.object({
@@ -97,12 +98,12 @@ const app = new Hono()
     return c.json({ models });
   })
   .post("/chat", zValidator("json", chatSchema), async (c) => {
-    const { model, reasoningEffort, messages } = c.req.valid("json");
+    const { model, reasoningEffort, system, messages } = c.req.valid("json");
     // Encrypted reasoning only validates on the model that produced it;
     // Claude rejects another model's with "Invalid `signature`". Gemini binds
     // it to the exact content and silently drops it if either differs by a
     // byte, so both must round-trip untouched.
-    const upstreamMessages = messages.map((m) =>
+    const history = messages.map((m) =>
       m.role === "assistant" && m.opaque && m.model === model
         ? {
             role: m.role,
@@ -112,6 +113,10 @@ const app = new Hono()
           }
         : { role: m.role, content: m.content },
     ) as OpenAI.Chat.ChatCompletionMessageParam[];
+    const upstreamMessages: OpenAI.Chat.ChatCompletionMessageParam[] =
+      system?.trim()
+        ? [{ role: "system", content: system }, ...history]
+        : history;
 
     const controller = new AbortController();
     const completion = await openai.chat.completions.create(

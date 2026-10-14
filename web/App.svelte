@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import Info from "@lucide/svelte/icons/info";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Brain from "@lucide/svelte/icons/brain";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SquarePen from "@lucide/svelte/icons/square-pen";
@@ -24,6 +25,7 @@
   };
 
   const MODEL_KEY = "model";
+  const SYSTEM_KEY = "system";
   const effortKey = (id: string) => `effort:${id}`;
   const effortLabels: Record<string, string> = {
     none: "No thinking",
@@ -37,6 +39,8 @@
   let effort = $state("");
   let copied = $state<number | null>(null);
   let infoOpen = $state<number | null>(null);
+  let system = $state(localStorage.getItem(SYSTEM_KEY) ?? "");
+  let systemDialog: HTMLDialogElement;
   let messages = $state<Message[]>([]);
   let input = $state("");
   let error = $state("");
@@ -129,6 +133,7 @@
           json: {
             model,
             reasoningEffort: effort || undefined,
+            system,
             messages: history,
           },
         },
@@ -175,6 +180,11 @@
     setTimeout(() => {
       if (copied === i) copied = null;
     }, 1500);
+  }
+
+  function saveSystem(value: string) {
+    system = value;
+    localStorage.setItem(SYSTEM_KEY, value);
   }
 
   function stop() {
@@ -231,10 +241,22 @@
       </label>
     {/if}
     <button
+      onclick={() => systemDialog.showModal()}
+      title="System prompt"
+      aria-label="System prompt"
+      class="relative ml-auto rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+    >
+      <ScrollText class="size-5" />
+      {#if system.trim()}
+        <span class="absolute top-1.5 right-1.5 size-2 rounded-full bg-blue-500"
+        ></span>
+      {/if}
+    </button>
+    <button
       onclick={newChat}
       title="New chat"
       aria-label="New chat"
-      class="ml-auto rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+      class="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
     >
       <SquarePen class="size-5" />
     </button>
@@ -404,3 +426,33 @@
     </form>
   </footer>
 </div>
+
+<dialog
+  bind:this={systemDialog}
+  closedby="any"
+  class="m-auto w-[min(42rem,calc(100%-2rem))] rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+>
+  <form method="dialog" class="flex flex-col gap-3 p-4">
+    <div class="flex items-center gap-2">
+      <ScrollText class="size-5 text-zinc-500" />
+      <h2 class="font-medium">System prompt</h2>
+    </div>
+    <textarea
+      value={system}
+      oninput={(e) => saveSystem(e.currentTarget.value)}
+      rows="10"
+      placeholder="You are a helpful assistant."
+      class="resize-y rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-700 dark:focus:border-zinc-500"
+    ></textarea>
+    <div class="flex items-center justify-between">
+      <p class="text-xs text-zinc-500">
+        Saved automatically. Applies to every message sent.
+      </p>
+      <button
+        class="rounded-full bg-zinc-900 px-4 py-1.5 text-sm text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+      >
+        Done
+      </button>
+    </div>
+  </form>
+</dialog>
