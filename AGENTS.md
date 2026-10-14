@@ -6,7 +6,8 @@ single Bun binary (`dist/app`). Svelte 5 SPA in `web/`, Hono + Zod API in
 
 - `server/index.ts`: `GET /api/models` lists upstream models; `POST /api/chat`
   streams the assistant reply as plain text chunks. Uses the `openai` SDK,
-  which reads `OPENAI_BASE_URL` / `OPENAI_API_KEY`; `OPENAI_MODEL` sets the
+  which reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` and sends
+  `Copilot-Integration-Id: vscode-chat` (required by the GitHub Copilot API); `OPENAI_MODEL` sets the
   default model. Upstream errors become `{ error }` JSON responses.
 - `web/App.svelte`: the whole chat UI (in-memory history, no persistence).
   Markdown is rendered with `marked` and sanitized with DOMPurify

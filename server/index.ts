@@ -6,7 +6,9 @@ import OpenAI from "openai";
 import { z } from "zod";
 
 // Reads OPENAI_API_KEY and OPENAI_BASE_URL from the environment.
-const openai = new OpenAI();
+const openai = new OpenAI({
+  defaultHeaders: { "Copilot-Integration-Id": "vscode-chat" },
+});
 
 const chatSchema = z.object({
   model: z.string().min(1),
