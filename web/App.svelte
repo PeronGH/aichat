@@ -1,12 +1,15 @@
 <script lang="ts">
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Bot from "@lucide/svelte/icons/bot";
+  import Check from "@lucide/svelte/icons/check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Info from "@lucide/svelte/icons/info";
   import Brain from "@lucide/svelte/icons/brain";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import Square from "@lucide/svelte/icons/square";
   import { tick } from "svelte";
-  import type { ChatEvent } from "../server";
+  import type { ChatEvent, Usage } from "../server";
   import { api } from "./api";
   import { renderMarkdown } from "./markdown";
 
@@ -17,6 +20,7 @@
     model?: string;
     reasoning?: string;
     opaque?: string;
+    usage?: Usage;
   };
 
   const MODEL_KEY = "model";
@@ -31,6 +35,8 @@
   let models = $state<ModelInfo[]>([]);
   let model = $state("");
   let effort = $state("");
+  let copied = $state<number | null>(null);
+  let infoOpen = $state<number | null>(null);
   let messages = $state<Message[]>([]);
   let input = $state("");
   let error = $state("");
@@ -142,6 +148,7 @@
           if (event.type === "content") reply.content += event.text;
           else if (event.type === "reasoning") reply.reasoning += event.text;
           else if (event.type === "opaque") reply.opaque = event.value;
+          else if (event.type === "usage") reply.usage = event.usage;
           else throw new Error(event.message);
         }
       }
@@ -155,6 +162,21 @@
     }
   }
 
+  // <svelte:window> event handlers crash under bun-plugin-svelte.
+  $effect(() => {
+    const close = () => (infoOpen = null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  });
+
+  async function copy(i: number, text: string) {
+    await navigator.clipboard.writeText(text);
+    copied = i;
+    setTimeout(() => {
+      if (copied === i) copied = null;
+    }, 1500);
+  }
+
   function stop() {
     controller?.abort();
   }
@@ -163,6 +185,7 @@
     stop();
     messages = [];
     error = "";
+    infoOpen = null;
     textarea.focus();
   }
 
@@ -268,6 +291,63 @@
               <span
                 class="inline-block size-2.5 animate-pulse rounded-full bg-zinc-400"
               ></span>
+            {/if}
+            {#if !streaming && message.content}
+              {@const usage = message.usage}
+              <div class="relative -mt-1 -ml-1.5 flex gap-0.5 text-zinc-400">
+                <button
+                  onclick={() => copy(i, message.content)}
+                  title="Copy"
+                  aria-label="Copy"
+                  class="rounded-md p-1.5 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                >
+                  {#if copied === i}
+                    <Check class="size-4" />
+                  {:else}
+                    <Copy class="size-4" />
+                  {/if}
+                </button>
+                {#if usage}
+                  <button
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      infoOpen = infoOpen === i ? null : i;
+                    }}
+                    title="Info"
+                    aria-label="Info"
+                    aria-expanded={infoOpen === i}
+                    class="rounded-md p-1.5 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                  >
+                    <Info class="size-4" />
+                  </button>
+                  {#if infoOpen === i}
+                    <dl
+                      class="absolute bottom-full left-0 z-10 mb-1 grid grid-cols-[auto_auto] gap-x-6 gap-y-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs whitespace-nowrap text-zinc-600 shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+                    >
+                      <dt>Model</dt>
+                      <dd class="text-right font-medium">{message.model}</dd>
+                      <dt>Input tokens</dt>
+                      <dd class="text-right tabular-nums">
+                        {usage.input.toLocaleString()}
+                      </dd>
+                      <dt>Cached tokens</dt>
+                      <dd class="text-right tabular-nums">
+                        {usage.cached.toLocaleString()}
+                      </dd>
+                      <dt>Output tokens</dt>
+                      <dd class="text-right tabular-nums">
+                        {usage.output.toLocaleString()}
+                      </dd>
+                      {#if usage.reasoning !== undefined}
+                        <dt class="pl-3">of which reasoning</dt>
+                        <dd class="text-right tabular-nums">
+                          {usage.reasoning.toLocaleString()}
+                        </dd>
+                      {/if}
+                    </dl>
+                  {/if}
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}

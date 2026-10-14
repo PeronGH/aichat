@@ -8,7 +8,7 @@ API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
   support `/chat/completions`, in API order, with their `reasoning_effort`
   levels and a default effort (ported from VS Code's
   `pickDefaultReasoningEffort`). `POST /api/chat` streams NDJSON `ChatEvent`s
-  (`content`, `reasoning`, `opaque`, `error`). Uses the `openai` SDK against
+  (`content`, `reasoning`, `opaque`, `usage`, `error`). Uses the `openai` SDK against
   `https://api.githubcopilot.com`, authenticated with `gh auth token` (read
   once at startup) and sending `Copilot-Integration-Id: vscode-chat`. Upstream
   errors become `{ error }` JSON responses.
@@ -31,6 +31,11 @@ API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
     reasoning (visible only as lower `usage.prompt_tokens`). Never trim or
     normalize stored assistant `content` or `opaque`. `reasoning_text` is
     ignored by Gemini.
+- Copilot usage: sent on the final chunk without `stream_options`; Gemini
+  also sends zeroed usage on earlier chunks, so keep the last. Reasoning
+  tokens are a top-level `usage.reasoning_tokens`. `completion_tokens`
+  excludes reasoning for Gemini but includes it for GPT, so output is computed
+  as `total_tokens - prompt_tokens`.
 - Reference for Copilot API behavior: the Copilot extension in the VS Code
   repo (`extensions/copilot/src`).
 
@@ -75,6 +80,8 @@ The split is fixed: backend code lives in `server/`, frontend code in `web/`.
 - Compiled Bun binaries default `NODE_ENV` to `development`. `build.ts` inlines
   `process.env.NODE_ENV = "production"` via `define`; don't remove it, or the
   binary serves unminified assets with HMR enabled.
+- `<svelte:window on...>` crashes at runtime under `bun-plugin-svelte`
+  (listener attached to `undefined`); add window listeners in an `$effect`.
 - Style with Tailwind utility classes in markup. Tailwind syntax (`@apply`)
   inside Svelte `<style>` blocks is not processed by the plugin.
 

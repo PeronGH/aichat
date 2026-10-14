@@ -27,7 +27,18 @@ type CopilotDelta = OpenAI.Chat.ChatCompletionChunk.Choice.Delta & {
   reasoning_opaque?: string | null;
 };
 
+// Copilot reports reasoning_tokens at the top level of usage.
+type CopilotUsage = OpenAI.CompletionUsage & { reasoning_tokens?: number };
+
+export type Usage = {
+  input: number;
+  cached: number;
+  output: number;
+  reasoning?: number;
+};
+
 export type ChatEvent =
+  | { type: "usage"; usage: Usage }
   | { type: "content"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "opaque"; value: string }
@@ -122,7 +133,10 @@ const app = new Hono()
         s.onAbort(() => controller.abort());
         const send = (event: ChatEvent) =>
           s.write(JSON.stringify(event) + "\n");
+        let usage: CopilotUsage | undefined;
         for await (const chunk of completion) {
+          // Gemini sends zeroed usage on earlier chunks; the last one is final.
+          if (chunk.usage) usage = chunk.usage;
           const delta = chunk.choices[0]?.delta as CopilotDelta | undefined;
           if (!delta) continue;
           if (delta.reasoning_text) {
@@ -134,6 +148,21 @@ const app = new Hono()
           if (delta.content) {
             await send({ type: "content", text: delta.content });
           }
+        }
+        if (usage) {
+          await send({
+            type: "usage",
+            usage: {
+              input: usage.prompt_tokens,
+              cached: usage.prompt_tokens_details?.cached_tokens ?? 0,
+              // completion_tokens excludes reasoning for Gemini but includes it
+              // for GPT; the total is consistent across models.
+              output: usage.total_tokens - usage.prompt_tokens,
+              reasoning:
+                usage.reasoning_tokens ??
+                usage.completion_tokens_details?.reasoning_tokens,
+            },
+          });
         }
       },
       async (err, s) => {
