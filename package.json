@@ -1,0 +1,36 @@
+{
+  "name": "bun-svelte-starter",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "build": "bun run build.ts",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "latest",
+    "bun-plugin-svelte": "^0.0.6",
+    "bun-plugin-tailwind": "^0.1.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-svelte": "^3.23.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte-check": "^4.7.6",
+    "tailwindcss": "^4.3.3",
+    "typescript-eslint": "^8.71.1"
+  },
+  "peerDependencies": {
+    "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.1",
+    "hono": "^4.13.13",
+    "svelte": "^5.57.2",
+    "zod": "^4.6.5"
+  }
+}
