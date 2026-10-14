@@ -5,8 +5,9 @@ import { stream } from "hono/streaming";
 import OpenAI from "openai";
 import { z } from "zod";
 
-// Reads OPENAI_API_KEY and OPENAI_BASE_URL from the environment.
 const openai = new OpenAI({
+  baseURL: "https://api.githubcopilot.com",
+  apiKey: (await Bun.$`gh auth token`.text()).trim(),
   defaultHeaders: { "Copilot-Integration-Id": "vscode-chat" },
 });
 
@@ -32,7 +33,7 @@ const app = new Hono()
     const ids: string[] = [];
     for await (const model of openai.models.list()) ids.push(model.id);
     ids.sort();
-    const defaultModel = process.env["OPENAI_MODEL"] ?? ids[0] ?? null;
+    const defaultModel = process.env["COPILOT_MODEL"] ?? ids[0] ?? null;
     if (defaultModel && !ids.includes(defaultModel)) ids.unshift(defaultModel);
     return c.json({ models: ids, defaultModel });
   })
