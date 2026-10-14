@@ -88,7 +88,9 @@ const app = new Hono()
   .post("/chat", zValidator("json", chatSchema), async (c) => {
     const { model, reasoningEffort, messages } = c.req.valid("json");
     // Encrypted reasoning only validates on the model that produced it;
-    // Claude rejects another model's with "Invalid `signature`".
+    // Claude rejects another model's with "Invalid `signature`". Gemini binds
+    // it to the exact content and silently drops it if either differs by a
+    // byte, so both must round-trip untouched.
     const upstreamMessages = messages.map((m) =>
       m.role === "assistant" && m.opaque && m.model === model
         ? {

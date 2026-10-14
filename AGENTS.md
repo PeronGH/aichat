@@ -26,6 +26,11 @@ API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
   - Assistant turns are replayed with `reasoning_text` + `reasoning_opaque`,
     but only to the model that produced them: Claude rejects another model's
     opaque with 400 "Invalid `signature`".
+  - Gemini never errors on a bad replay: a corrupted opaque, or content that
+    differs by a byte from what was streamed, makes it silently drop the
+    reasoning (visible only as lower `usage.prompt_tokens`). Never trim or
+    normalize stored assistant `content` or `opaque`. `reasoning_text` is
+    ignored by Gemini.
 - Reference for Copilot API behavior: the Copilot extension in the VS Code
   repo (`extensions/copilot/src`).
 
