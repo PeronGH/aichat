@@ -9,6 +9,8 @@
 
   type Message = { role: "user" | "assistant"; content: string };
 
+  const MODEL_KEY = "model";
+
   let models = $state<string[]>([]);
   let model = $state("");
   let messages = $state<Message[]>([]);
@@ -41,9 +43,14 @@
     }
     const data = await res.json();
     models = data.models;
-    model = data.defaultModel ?? "";
+    const saved = localStorage.getItem(MODEL_KEY);
+    model = saved && models.includes(saved) ? saved : (models[0] ?? "");
   }
   loadModels();
+
+  $effect(() => {
+    if (model) localStorage.setItem(MODEL_KEY, model);
+  });
 
   $effect(() => {
     void messages.at(-1)?.content;

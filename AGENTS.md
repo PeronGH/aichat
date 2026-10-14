@@ -4,13 +4,14 @@ Minimal AI chat app for the GitHub Copilot API (the only provider). Compiles to
 a single Bun binary (`dist/copilot-aichat`). Svelte 5 SPA in `web/`, Hono + Zod
 API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
 
-- `server/index.ts`: `GET /api/models` lists upstream models; `POST /api/chat`
-  streams the assistant reply as plain text chunks. Uses the `openai` SDK
-  against `https://api.githubcopilot.com`, authenticated with `gh auth token`
-  (read once at startup) and sending `Copilot-Integration-Id: vscode-chat`.
-  `COPILOT_MODEL` sets the default model. Upstream errors become `{ error }`
-  JSON responses.
-- `web/App.svelte`: the whole chat UI (in-memory history, no persistence).
+- `server/index.ts`: `GET /api/models` lists picker-enabled chat models that
+  support `/chat/completions`, in API order; `POST /api/chat` streams the
+  assistant reply as plain text chunks. Uses the `openai` SDK against
+  `https://api.githubcopilot.com`, authenticated with `gh auth token` (read
+  once at startup) and sending `Copilot-Integration-Id: vscode-chat`. Upstream
+  errors become `{ error }` JSON responses.
+- `web/App.svelte`: the whole chat UI (in-memory history, no persistence;
+  only the selected model is remembered in `localStorage`).
   Markdown is rendered with `marked` and sanitized with DOMPurify
   (`web/markdown.ts`), styled with `@tailwindcss/typography`. Icons come from
   `@lucide/svelte` (import per icon: `@lucide/svelte/icons/<name>`).

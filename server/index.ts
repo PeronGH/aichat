@@ -11,6 +11,12 @@ const openai = new OpenAI({
   defaultHeaders: { "Copilot-Integration-Id": "vscode-chat" },
 });
 
+type CopilotModel = OpenAI.Models.Model & {
+  model_picker_enabled?: boolean;
+  capabilities?: { type?: string };
+  supported_endpoints?: string[];
+};
+
 const chatSchema = z.object({
   model: z.string().min(1),
   messages: z
@@ -30,12 +36,17 @@ const app = new Hono()
     return c.json({ error: err.message }, status as ContentfulStatusCode);
   })
   .get("/models", async (c) => {
-    const ids: string[] = [];
-    for await (const model of openai.models.list()) ids.push(model.id);
-    ids.sort();
-    const defaultModel = process.env["COPILOT_MODEL"] ?? ids[0] ?? null;
-    if (defaultModel && !ids.includes(defaultModel)) ids.unshift(defaultModel);
-    return c.json({ models: ids, defaultModel });
+    const models: string[] = [];
+    for await (const model of openai.models.list() as AsyncIterable<CopilotModel>) {
+      if (
+        model.model_picker_enabled &&
+        model.capabilities?.type === "chat" &&
+        model.supported_endpoints?.includes("/chat/completions")
+      ) {
+        models.push(model.id);
+      }
+    }
+    return c.json({ models });
   })
   .post("/chat", zValidator("json", chatSchema), async (c) => {
     const { model, messages } = c.req.valid("json");
