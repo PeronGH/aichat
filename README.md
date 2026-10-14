@@ -4,7 +4,7 @@ Minimal AI chat web app for any OpenAI-compatible Chat Completions API. Compiles
 
 ## Usage
 
-Configure via environment variables (or a `.env` file in dev):
+Configure via environment variables (or copy `.env.example` to `.env`; Bun loads it from the working directory):
 
 - `OPENAI_BASE_URL`: API base URL, e.g. `https://api.openai.com/v1` (default)
 - `OPENAI_API_KEY`: API key
