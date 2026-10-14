@@ -5,16 +5,27 @@ a single Bun binary (`dist/copilot-aichat`). Svelte 5 SPA in `web/`, Hono + Zod
 API in `server/`, end-to-end typed via Hono RPC. No Vite, no Node.js.
 
 - `server/index.ts`: `GET /api/models` lists picker-enabled chat models that
-  support `/chat/completions`, in API order; `POST /api/chat` streams the
-  assistant reply as plain text chunks. Uses the `openai` SDK against
+  support `/chat/completions`, in API order, with their `reasoning_effort`
+  levels and a default effort (ported from VS Code's
+  `pickDefaultReasoningEffort`). `POST /api/chat` streams NDJSON `ChatEvent`s
+  (`content`, `reasoning`, `opaque`, `error`). Uses the `openai` SDK against
   `https://api.githubcopilot.com`, authenticated with `gh auth token` (read
   once at startup) and sending `Copilot-Integration-Id: vscode-chat`. Upstream
   errors become `{ error }` JSON responses.
 - `web/App.svelte`: the whole chat UI (in-memory history, no persistence;
-  only the selected model is remembered in `localStorage`).
+  the selected model and per-model effort are remembered in `localStorage`).
   Markdown is rendered with `marked` and sanitized with DOMPurify
   (`web/markdown.ts`), styled with `@tailwindcss/typography`. Icons come from
   `@lucide/svelte` (import per icon: `@lucide/svelte/icons/<name>`).
+- Copilot reasoning (verified against the live API):
+  - Reasoning arrives in the non-standard delta fields `reasoning_text` (text)
+    and `reasoning_opaque` (encrypted, may arrive on the `finish_reason`
+    chunk).
+  - Claude only thinks when `reasoning_effort` is sent. GPT models reason but
+    expose no text over Chat Completions.
+  - Assistant turns are replayed with `reasoning_text` + `reasoning_opaque`,
+    but only to the model that produced them: Claude rejects another model's
+    opaque with 400 "Invalid `signature`".
 - Reference for Copilot API behavior: the Copilot extension in the VS Code
   repo (`extensions/copilot/src`).
 

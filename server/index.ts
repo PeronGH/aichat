@@ -13,17 +13,45 @@ const openai = new OpenAI({
 
 type CopilotModel = OpenAI.Models.Model & {
   model_picker_enabled?: boolean;
-  capabilities?: { type?: string };
+  capabilities?: {
+    type?: string;
+    family?: string;
+    supports?: { reasoning_effort?: string[] };
+  };
   supported_endpoints?: string[];
 };
 
+// Copilot streams reasoning in these non-standard delta fields.
+type CopilotDelta = OpenAI.Chat.ChatCompletionChunk.Choice.Delta & {
+  reasoning_text?: string | null;
+  reasoning_opaque?: string | null;
+};
+
+export type ChatEvent =
+  | { type: "content"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "opaque"; value: string }
+  | { type: "error"; message: string };
+
+// Mirrors pickDefaultReasoningEffort in the VS Code Copilot extension.
+function defaultEffort(levels: string[], family: string): string | undefined {
+  const f = family.toLowerCase();
+  const medium = /^claude-(?:opus|haiku)-5[.-]5(?![.\d])/.test(f);
+  const preferred = !medium && f.startsWith("claude") ? "high" : "medium";
+  return levels.includes(preferred) ? preferred : levels[0];
+}
+
 const chatSchema = z.object({
   model: z.string().min(1),
+  reasoningEffort: z.string().optional(),
   messages: z
     .array(
       z.object({
-        role: z.enum(["system", "user", "assistant"]),
+        role: z.enum(["user", "assistant"]),
         content: z.string(),
+        model: z.string().optional(),
+        reasoning: z.string().optional(),
+        opaque: z.string().optional(),
       }),
     )
     .min(1),
@@ -36,36 +64,83 @@ const app = new Hono()
     return c.json({ error: err.message }, status as ContentfulStatusCode);
   })
   .get("/models", async (c) => {
-    const models: string[] = [];
+    const models: { id: string; efforts: string[]; defaultEffort?: string }[] =
+      [];
     for await (const model of openai.models.list() as AsyncIterable<CopilotModel>) {
       if (
         model.model_picker_enabled &&
         model.capabilities?.type === "chat" &&
         model.supported_endpoints?.includes("/chat/completions")
       ) {
-        models.push(model.id);
+        const efforts = model.capabilities.supports?.reasoning_effort ?? [];
+        models.push({
+          id: model.id,
+          efforts,
+          defaultEffort: defaultEffort(
+            efforts,
+            model.capabilities.family ?? model.id,
+          ),
+        });
       }
     }
     return c.json({ models });
   })
   .post("/chat", zValidator("json", chatSchema), async (c) => {
-    const { model, messages } = c.req.valid("json");
+    const { model, reasoningEffort, messages } = c.req.valid("json");
+    // Encrypted reasoning only validates on the model that produced it;
+    // Claude rejects another model's with "Invalid `signature`".
+    const upstreamMessages = messages.map((m) =>
+      m.role === "assistant" && m.opaque && m.model === model
+        ? {
+            role: m.role,
+            content: m.content,
+            reasoning_text: m.reasoning ?? "",
+            reasoning_opaque: m.opaque,
+          }
+        : { role: m.role, content: m.content },
+    ) as OpenAI.Chat.ChatCompletionMessageParam[];
+
     const controller = new AbortController();
     const completion = await openai.chat.completions.create(
-      { model, messages, stream: true },
+      {
+        model,
+        messages: upstreamMessages,
+        stream: true,
+        ...(reasoningEffort && {
+          reasoning_effort: reasoningEffort as OpenAI.ReasoningEffort,
+        }),
+      },
       { signal: controller.signal },
     );
+
+    c.header("Content-Type", "application/x-ndjson");
     return stream(
       c,
       async (s) => {
         s.onAbort(() => controller.abort());
+        const send = (event: ChatEvent) =>
+          s.write(JSON.stringify(event) + "\n");
         for await (const chunk of completion) {
-          const delta = chunk.choices[0]?.delta.content;
-          if (delta) await s.write(delta);
+          const delta = chunk.choices[0]?.delta as CopilotDelta | undefined;
+          if (!delta) continue;
+          if (delta.reasoning_text) {
+            await send({ type: "reasoning", text: delta.reasoning_text });
+          }
+          if (delta.reasoning_opaque) {
+            await send({ type: "opaque", value: delta.reasoning_opaque });
+          }
+          if (delta.content) {
+            await send({ type: "content", text: delta.content });
+          }
         }
       },
       async (err, s) => {
-        await s.write(`\n\n**Error:** ${err.message}`);
+        await s.write(
+          JSON.stringify({
+            type: "error",
+            message: err.message,
+          } satisfies ChatEvent) + "\n",
+        );
       },
     );
   });

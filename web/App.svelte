@@ -1,18 +1,36 @@
 <script lang="ts">
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Bot from "@lucide/svelte/icons/bot";
+  import Brain from "@lucide/svelte/icons/brain";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import Square from "@lucide/svelte/icons/square";
   import { tick } from "svelte";
+  import type { ChatEvent } from "../server";
   import { api } from "./api";
   import { renderMarkdown } from "./markdown";
 
-  type Message = { role: "user" | "assistant"; content: string };
+  type ModelInfo = { id: string; efforts: string[]; defaultEffort?: string };
+  type Message = {
+    role: "user" | "assistant";
+    content: string;
+    model?: string;
+    reasoning?: string;
+    opaque?: string;
+  };
 
   const MODEL_KEY = "model";
+  const effortKey = (id: string) => `effort:${id}`;
+  const effortLabels: Record<string, string> = {
+    none: "No thinking",
+    xhigh: "Extra high",
+  };
+  const effortLabel = (level: string) =>
+    effortLabels[level] ?? level.charAt(0).toUpperCase() + level.slice(1);
 
-  let models = $state<string[]>([]);
+  let models = $state<ModelInfo[]>([]);
   let model = $state("");
+  let effort = $state("");
   let messages = $state<Message[]>([]);
   let input = $state("");
   let error = $state("");
@@ -22,6 +40,7 @@
   let stickToBottom = true;
 
   const busy = $derived(controller !== null);
+  const efforts = $derived(models.find((m) => m.id === model)?.efforts ?? []);
 
   async function errorMessage(
     res: Pick<Response, "text" | "statusText">,
@@ -44,16 +63,31 @@
     const data = await res.json();
     models = data.models;
     const saved = localStorage.getItem(MODEL_KEY);
-    model = saved && models.includes(saved) ? saved : (models[0] ?? "");
+    const initial = models.find((m) => m.id === saved) ?? models[0];
+    if (initial) selectModel(initial.id);
   }
   loadModels();
 
-  $effect(() => {
-    if (model) localStorage.setItem(MODEL_KEY, model);
-  });
+  function selectModel(id: string) {
+    model = id;
+    localStorage.setItem(MODEL_KEY, id);
+    const info = models.find((m) => m.id === id);
+    const saved = localStorage.getItem(effortKey(id));
+    effort =
+      saved && info?.efforts.includes(saved)
+        ? saved
+        : (info?.defaultEffort ?? "");
+  }
+
+  function selectEffort(level: string) {
+    effort = level;
+    localStorage.setItem(effortKey(model), level);
+  }
 
   $effect(() => {
-    void messages.at(-1)?.content;
+    const last = messages.at(-1);
+    void last?.content;
+    void last?.reasoning;
     if (stickToBottom) scroller.scrollTop = scroller.scrollHeight;
   });
 
@@ -77,7 +111,7 @@
 
     messages.push({ role: "user", content: text });
     const history = $state.snapshot(messages);
-    messages.push({ role: "assistant", content: "" });
+    messages.push({ role: "assistant", content: "", model, reasoning: "" });
     const reply = messages[messages.length - 1]!;
     stickToBottom = true;
 
@@ -85,15 +119,31 @@
     controller = ctrl;
     try {
       const res = await api.chat.$post(
-        { json: { model, messages: history } },
+        {
+          json: {
+            model,
+            reasoningEffort: effort || undefined,
+            messages: history,
+          },
+        },
         { init: { signal: ctrl.signal } },
       );
       if (!res.ok || !res.body) throw new Error(await errorMessage(res));
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        reply.content += value;
+        buffer += value;
+        const lines = buffer.split("\n");
+        buffer = lines.pop()!;
+        for (const line of lines) {
+          const event = JSON.parse(line) as ChatEvent;
+          if (event.type === "content") reply.content += event.text;
+          else if (event.type === "reasoning") reply.reasoning += event.text;
+          else if (event.type === "opaque") reply.opaque = event.value;
+          else throw new Error(event.message);
+        }
       }
     } catch (err) {
       if (!ctrl.signal.aborted) {
@@ -130,14 +180,33 @@
   >
     <Bot class="size-5 text-zinc-500" />
     <select
-      bind:value={model}
+      value={model}
+      onchange={(e) => selectModel(e.currentTarget.value)}
       aria-label="Model"
       class="max-w-64 truncate rounded-md bg-transparent px-2 py-1 text-sm font-medium hover:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900"
     >
-      {#each models as m (m)}
-        <option value={m}>{m}</option>
+      {#each models as m (m.id)}
+        <option value={m.id}>{m.id}</option>
       {/each}
     </select>
+    {#if efforts.length}
+      <label
+        class="flex items-center gap-1 rounded-md pl-2 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+        title="Thinking effort"
+      >
+        <Brain class="size-4" />
+        <select
+          value={effort}
+          onchange={(e) => selectEffort(e.currentTarget.value)}
+          aria-label="Thinking effort"
+          class="bg-transparent py-1 pr-2 focus:outline-none"
+        >
+          {#each efforts as level (level)}
+            <option value={level}>{effortLabel(level)}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
     <button
       onclick={newChat}
       title="New chat"
@@ -162,18 +231,40 @@
       {#each messages as message, i (i)}
         {#if message.role === "user"}
           <div
-            class="max-w-[85%] self-end rounded-2xl bg-zinc-100 px-4 py-2.5 whitespace-pre-wrap dark:bg-zinc-800"
+            class="max-w-[85%] self-end rounded-2xl bg-zinc-100 px-4 py-2.5 dark:bg-zinc-800"
           >
-            {message.content}
+            <span class="whitespace-pre-wrap">{message.content}</span>
           </div>
         {:else}
-          <div
-            class="prose max-w-none prose-zinc dark:prose-invert prose-pre:bg-zinc-900 prose-pre:text-zinc-100"
-          >
+          {@const streaming = busy && i === messages.length - 1}
+          <div class="flex flex-col gap-3">
+            {#if message.reasoning}
+              <details class="group" open={streaming && !message.content}>
+                <summary
+                  class="flex cursor-pointer list-none items-center gap-1.5 text-sm text-zinc-500 select-none hover:text-zinc-700 dark:hover:text-zinc-300"
+                >
+                  <Brain class="size-4" />
+                  {streaming && !message.content ? "Thinking…" : "Thought"}
+                  <ChevronRight
+                    class="size-4 transition-transform group-open:rotate-90"
+                  />
+                </summary>
+                <div
+                  class="prose mt-2 max-w-none border-l-2 border-zinc-200 pl-4 text-sm prose-zinc dark:border-zinc-800 dark:prose-invert"
+                >
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized by DOMPurify -->
+                  {@html renderMarkdown(message.reasoning)}
+                </div>
+              </details>
+            {/if}
             {#if message.content}
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized by DOMPurify -->
-              {@html renderMarkdown(message.content)}
-            {:else}
+              <div
+                class="prose max-w-none prose-zinc dark:prose-invert prose-pre:bg-zinc-900 prose-pre:text-zinc-100"
+              >
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized by DOMPurify -->
+                {@html renderMarkdown(message.content)}
+              </div>
+            {:else if !message.reasoning}
               <span
                 class="inline-block size-2.5 animate-pulse rounded-full bg-zinc-400"
               ></span>
